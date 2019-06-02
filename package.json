@@ -2,7 +2,7 @@
   "name": "react-native-scrollview",
   "version": "1.0.0",
   "description": "React Native Scrollview reimplemented using react-native-gesture-handler",
-  "main": "index.js",
+  "main": "index",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -20,5 +20,12 @@
   "bugs": {
     "url": "https://github.com/loose-dev/react-native-scrollview/issues"
   },
-  "homepage": "https://github.com/loose-dev/react-native-scrollview#readme"
+  "homepage": "https://github.com/loose-dev/react-native-scrollview#readme",
+  "peerDependencies": {
+    "@types/react": "^16.8.19",
+    "@types/react-native": "^0.57.60",
+    "react": "^16.8.6",
+    "react-native": "^0.59.8",
+    "react-native-gesture-handler": "^1.2.2"
+  }
 }
