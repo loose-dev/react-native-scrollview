@@ -134,7 +134,7 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
                   add(
                     multiply(
                       -MAX_OVERSCROLL_VERTICAL,
-                      exp(divide(translationY, -MAX_OVERSCROLL_VERTICAL * 3))
+                      exp(divide(translationY, -MAX_OVERSCROLL_VERTICAL))
                     ),
                     this.offsetY,
                     MAX_OVERSCROLL_VERTICAL
@@ -152,7 +152,10 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
               ),
               [
                 set(this.locationX, add(translationX, this.offsetX)),
-                set(this.locationY, add(translationY, this.offsetY))
+                set(
+                  this.locationY,
+                  add(multiply(translationY, 2), this.offsetY)
+                )
               ]
             )
           ]),
@@ -173,7 +176,7 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
                 // spring back on release when overscrolled
                 set(
                   this.locationY,
-                  this.startMomentumScroll(this.locationY, -1000, 0)
+                  this.startMomentumScroll(this.locationY, -600, 0)
                 )
               ],
               [
@@ -184,7 +187,7 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
                     this.startMomentumScroll(
                       this.locationY,
                       velocityY,
-                      add(this.locationY, multiply(velocityY, 0.5))
+                      add(this.locationY, multiply(velocityY, 1))
                     )
                   )
                 ])
