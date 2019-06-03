@@ -1,5 +1,11 @@
 import React from "react";
-import { View, StyleSheet, Text } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Text,
+  TextInput,
+  ScrollView as NativeScrollView
+} from "react-native";
 import ScrollView from "./ScrollView";
 
 interface ExampleScreenProps {}
@@ -7,13 +13,19 @@ interface ExampleScreenProps {}
 export default class ExampleScreen extends React.Component<ExampleScreenProps> {
   render() {
     return (
-      <ScrollView contentContainerStyle={styles.container}>
-        {[...Array(100)].map((n, index) => (
-          <View key={index} style={styles.item}>
-            <Text>{index}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      <View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.container}
+        >
+          {[...Array(100)].map((n, index) => (
+            <View key={index} style={styles.item}>
+              <Text>{index}</Text>
+              <TextInput defaultValue={"*" + index} />
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     );
   }
 }

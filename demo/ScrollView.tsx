@@ -10,12 +10,13 @@ import {
 import {
   PanGestureHandler,
   PanGestureHandlerStateChangeEvent,
+  TapGestureHandler,
   State,
   GestureHandlerGestureEventNativeEvent,
   PanGestureHandlerEventExtra
 } from "react-native-gesture-handler";
 
-import Animated from "react-native-reanimated";
+import Animated, { Easing } from "react-native-reanimated";
 
 const {
   event,
@@ -24,11 +25,24 @@ const {
   eq,
   add,
   block,
+  decay,
+  divide,
+  spring,
+  debug,
+  timing,
   Value,
   View,
   startClock,
   stopClock,
-  Clock
+  clockRunning,
+  Clock,
+  multiply,
+  greaterThan,
+  exp,
+  abs,
+  and,
+  not,
+  greaterOrEq
 } = Animated;
 
 interface ScrollViewProps extends NativeScrollViewProps {}
@@ -37,6 +51,8 @@ type PanNativeEvent = GestureHandlerGestureEventNativeEvent &
   PanGestureHandlerEventExtra;
 
 const initLayout = { x: 0, y: 0, height: 0, width: 0 };
+
+const MAX_OVERSCROLL_VERTICAL = Dimensions.get("window").height;
 
 export default class ScrollView extends React.Component<ScrollViewProps> {
   locationY = new Value(0);
@@ -49,32 +65,141 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
 
   momentumClock = new Clock();
 
+  startMomentumScroll = (
+    value: Animated.Node<number>,
+    velocity: number,
+    dest: Animated.Node<number>
+  ) => {
+    const state = {
+      finished: new Value(0),
+      velocity: new Value(0),
+      position: new Value(0),
+      time: new Value(0)
+    };
+
+    const config = {
+      toValue: new Value(0),
+      mass: 1,
+      damping: 10,
+      stiffness: 20,
+      overshootClamping: true,
+      restSpeedThreshold: 1,
+      restDisplacementThreshold: 1
+    };
+
+    return [
+      debug("clockRunning", state.velocity),
+      cond(clockRunning(this.momentumClock), 0, [
+        set(state.finished, 0),
+        set(state.position, value),
+        set(config.toValue, dest),
+        set(state.time, 0),
+        set(state.velocity, velocity),
+        startClock(this.momentumClock)
+      ]),
+      spring(this.momentumClock, state, config),
+      cond(state.finished, stopClock(this.momentumClock)),
+      state.position,
+      debug("position", state.position)
+    ];
+  };
+
   panEvent = event([
     {
       nativeEvent: ({
-        translationX: x,
-        translationY: y,
-        state
+        translationX,
+        translationY,
+        state,
+        velocityY,
+        velocityX
       }: PanNativeEvent) =>
         block([
-          // update on pan
-          stopClock(this.momentumClock),
-          set(this.locationX, add(x, this.offsetX)),
-          set(this.locationY, add(y, this.offsetY)),
+          set(this.velocityY, velocityY),
+
+          debug("active", eq(state, State.ACTIVE)),
+
+          // stop clock if user starts input again
+          cond(eq(state, State.ACTIVE), [
+            stopClock(this.momentumClock),
+
+            debug("loc", this.locationY),
+            debug("transY", greaterOrEq(translationY, 0)),
+
+            cond(
+              and(greaterOrEq(this.locationY, 0), greaterOrEq(translationY, 0)),
+              // make it exponentioally harder to scroll if overscrolling
+              [
+                set(
+                  this.locationY,
+                  add(
+                    multiply(
+                      -MAX_OVERSCROLL_VERTICAL,
+                      exp(divide(translationY, -MAX_OVERSCROLL_VERTICAL * 3))
+                    ),
+                    this.offsetY,
+                    MAX_OVERSCROLL_VERTICAL
+                  )
+                )
+              ]
+            ),
+
+            cond(
+              not(
+                and(
+                  greaterOrEq(this.locationY, 0),
+                  greaterOrEq(translationY, 0)
+                )
+              ),
+              [
+                set(this.locationX, add(translationX, this.offsetX)),
+                set(this.locationY, add(translationY, this.offsetY))
+              ]
+            )
+          ]),
+
+          cond(eq(state, State.BEGAN), [
+            debug("BEGAN", eq(state, State.BEGAN))
+          ]),
+
+          cond(eq(state, State.CANCELLED), [
+            debug("CANCELLED", eq(state, State.CANCELLED))
+          ]),
 
           // extract offset on pan end
           cond(eq(state, State.END), [
-            set(this.offsetX, add(this.offsetX, x)),
-            set(this.offsetY, add(this.offsetY, y)),
-            startClock(this.momentumClock)
+            cond(
+              greaterThan(this.locationY, 0),
+              [
+                // spring back on release when overscrolled
+                set(
+                  this.locationY,
+                  this.startMomentumScroll(this.locationY, -1000, 0)
+                )
+              ],
+              [
+                cond(greaterThan(abs(this.velocityY), 100), [
+                  // continue in scrolling direction after release (momentum)
+                  set(
+                    this.locationY,
+                    this.startMomentumScroll(
+                      this.locationY,
+                      velocityY,
+                      add(this.locationY, multiply(velocityY, 0.5))
+                    )
+                  )
+                ])
+              ]
+            ),
+            debug("END", eq(state, State.END)),
+            //debug("velocityY", this.velocityY),
+            set(this.offsetX, this.locationX),
+            set(this.offsetY, this.locationY)
           ])
         ])
     }
   ]);
   containerLayout: LayoutRectangle = initLayout;
   contentLayout: LayoutRectangle = initLayout;
-
-  componentDidMount() {}
 
   onContainerLayout = (event: LayoutChangeEvent) => {
     const newLayout = event.nativeEvent.layout;
@@ -107,31 +232,35 @@ export default class ScrollView extends React.Component<ScrollViewProps> {
       0,
       this.containerLayout.height - this.contentLayout.height
     );
-    const translateY = Animated.diffClamp(this.locationY, max, 200);
+    const translateY = Animated.diffClamp(this.locationY, max - 200, 200);
 
     return [{ translateY }];
   };
 
   render() {
-    const { children, contentContainerStyle } = this.props;
+    const { children, contentContainerStyle, style } = this.props;
 
     return (
-      <PanGestureHandler
-        onGestureEvent={this.panEvent}
-        onHandlerStateChange={this.panEvent}
-      >
-        <View onLayout={this.onContainerLayout} style={styles.container}>
-          <View
-            onLayout={this.onContentLayout}
-            style={[
-              contentContainerStyle,
-              { transform: this.getTranslateTransform() }
-            ]}
+      <TapGestureHandler onHandlerStateChange={this.panEvent}>
+        <View style={[styles.container]} onLayout={this.onContainerLayout}>
+          <PanGestureHandler
+            onGestureEvent={this.panEvent}
+            onHandlerStateChange={this.panEvent}
           >
-            {children}
-          </View>
+            <View style={{ width: "100%", height: "100%" }}>
+              <View
+                onLayout={this.onContentLayout}
+                style={[
+                  contentContainerStyle,
+                  { transform: [{ translateY: this.locationY }] }
+                ]}
+              >
+                {children}
+              </View>
+            </View>
+          </PanGestureHandler>
         </View>
-      </PanGestureHandler>
+      </TapGestureHandler>
     );
   }
 }
